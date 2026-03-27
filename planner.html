@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Planner – MyDailyStyle</title>
+  <meta name="description" content="Plan your outfits for any day. Assign tops, bottoms, shoes and accessories to calendar dates." />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    /* Two-column planner layout */
+    .planner-layout {
+      display: grid;
+      grid-template-columns: 400px 1fr; /* Wider sidebar for laptop */
+      gap: 32px;
+      align-items: start;
+    }
+
+    /* Calendar Panel */
+    .cal-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      position: sticky;
+      top: 100px;
+      box-shadow: var(--shadow-card);
+    }
+    .cal-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .cal-month-label {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .cal-nav-btn {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      border: 1px solid var(--border-glass);
+      background: var(--bg-glass);
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: var(--transition);
+    }
+    .cal-nav-btn:hover { background: rgba(124,58,237,0.15); border-color: var(--accent-2); color: var(--text-primary); }
+
+    /* Outfit builder panel */
+    .builder-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .builder-header {
+      padding: 24px 28px;
+      border-bottom: 1px solid var(--border-glass);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .selected-date-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .selected-date-badge i { color: var(--accent-3); }
+
+    /* Category section in builder */
+    .cat-builder-section { padding: 20px 28px; border-bottom: 1px solid var(--border-glass); }
+    .cat-builder-section:last-child { border-bottom: none; }
+    .cat-builder-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .cat-builder-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+    .cat-builder-label i { font-size: 1rem; }
+    .cat-builder-search {
+      width: 100%;
+      padding: 9px 12px 9px 36px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.82rem;
+      outline: none;
+      transition: var(--transition);
+      margin-bottom: 12px;
+    }
+    .cat-builder-search:focus {
+      border-color: var(--accent-2);
+      background: rgba(255,255,255,0.07);
+    }
+    .cat-search-wrap { position: relative; }
+    .cat-search-wrap i {
+      position: absolute;
+      left: 10px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    /* Horizontal scroll item row */
+    .cat-items-scroll {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+    }
+    .cat-items-scroll::-webkit-scrollbar { height: 4px; }
+    .cat-items-scroll::-webkit-scrollbar-thumb { background: var(--accent-1); border-radius: 2px; }
+
+    .cat-item-card {
+      flex-shrink: 0;
+      width: 100px;
+      background: var(--bg-secondary);
+      border: 2px solid var(--border-glass);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      cursor: pointer;
+      transition: var(--transition);
+      position: relative;
+    }
+    .cat-item-card:hover { border-color: var(--accent-2); transform: translateY(-2px); }
+    .cat-item-card.selected { border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-1); }
+    .cat-item-card img {
+      width: 100%; aspect-ratio: 1;
+      object-fit: cover;
+      display: block;
+    }
+    .cat-item-placeholder {
+      width: 100%; aspect-ratio: 1;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(124,58,237,0.08);
+      font-size: 1.5rem;
+      color: var(--text-muted);
+    }
+    .cat-item-name {
+      padding: 6px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .cat-item-check {
+      position: absolute; top: 4px; left: 4px;
+      width: 18px; height: 18px;
+      background: var(--accent-1);
+      border-radius: 50%;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 0.6rem;
+    }
+    .cat-item-card.selected .cat-item-check { display: flex; }
+
+    /* None / clear button */
+    .none-card {
+      flex-shrink: 0;
+      width: 80px;
+      background: rgba(239,68,68,0.08);
+      border: 2px solid rgba(239,68,68,0.2);
+      border-radius: var(--radius-sm);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 4px;
+      cursor: pointer;
+      padding: 14px 8px;
+      transition: var(--transition);
+      font-size: 0.7rem;
+      color: #f87171;
+      font-weight: 600;
+    }
+    .none-card:hover { background: rgba(239,68,68,0.15); }
+    .none-card i { font-size: 1.2rem; }
+
+    /* Save bar */
+    .builder-footer {
+      padding: 20px 28px;
+      border-top: 1px solid var(--border-glass);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .outfit-preview-mini {
+      display: flex;
+      gap: 6px;
+    }
+    .outfit-mini-thumb {
+      width: 40px; height: 40px;
+      border-radius: 8px;
+      object-fit: cover;
+      border: 1px solid var(--border-glass);
+    }
+    .outfit-mini-placeholder {
+      width: 40px; height: 40px;
+      border-radius: 8px;
+      background: var(--bg-glass);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      border: 1px solid var(--border-glass);
+    }
+
+    /* No date selected */
+    .no-date-selected {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 400px;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 40px;
+    }
+    .no-date-selected i { font-size: 4rem; margin-bottom: 16px; color: var(--accent-1); opacity: 0.4; }
+    .no-date-selected h3 { font-size: 1.1rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+
+    @media (max-width: 900px) {
+      .planner-layout { grid-template-columns: 1fr; }
+      .cal-panel { position: static; }
+    }
+    @media (max-width: 480px) {
+      .cat-builder-section { padding: 16px; }
+      .builder-header { padding: 16px; }
+      .builder-footer { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Top Navigation ── -->
+<nav class="navbar">
+  <a href="dashboard.html" class="navbar-brand">
+    <div class="navbar-logo"><i class="fa-solid fa-shirt"></i></div>
+    <span class="navbar-title">MyDailyStyle</span>
+  </a>
+  <ul class="navbar-nav">
+    <li><a href="dashboard.html" class="nav-link"><i class="fa-solid fa-house"></i> Dashboard</a></li>
+    <li><a href="store.html"     class="nav-link"><i class="fa-solid fa-store"></i> Store</a></li>
+    <li><a href="planner.html"   class="nav-link active"><i class="fa-regular fa-calendar"></i> Planner</a></li>
+  </ul>
+  <div class="navbar-user">
+    <div class="user-avatar" id="userAvatar">?</div>
+    <button class="btn btn-secondary btn-sm" onclick="logoutUser()">
+      <i class="fa-solid fa-right-from-bracket"></i> Logout
+    </button>
+  </div>
+</nav>
+
+<!-- ── Mobile Bottom Nav ── -->
+<nav class="bottom-nav">
+  <a href="dashboard.html" class="bottom-nav-item"><i class="fa-solid fa-house"></i><span>Home</span></a>
+  <a href="store.html"     class="bottom-nav-item"><i class="fa-solid fa-store"></i><span>Store</span></a>
+  <a href="planner.html"   class="bottom-nav-item active"><i class="fa-regular fa-calendar"></i><span>Planner</span></a>
+</nav>
+
+<div class="page-wrapper">
+  <div class="container">
+
+    <div class="section-header fade-in-up">
+      <div>
+        <h1 class="section-title"><i class="fa-regular fa-calendar gradient-text" style="margin-right:8px;"></i>Outfit Planner</h1>
+        <p class="section-subtitle">Pick a date, choose your outfit items</p>
+      </div>
+      <div class="info-strip">
+        <span class="info-pill"><i class="fa-solid fa-circle-check"></i> <span id="pillPlanned">0</span> days planned</span>
+        <a href="store.html" class="btn btn-secondary btn-sm"><i class="fa-solid fa-plus"></i> Add Items</a>
+      </div>
+    </div>
+
+    <div class="planner-layout fade-in-up delay-1">
+
+      <!-- ── Left: Calendar ── -->
+      <div class="cal-panel">
+        <div class="cal-nav">
+          <button class="cal-nav-btn" id="prevMonth"><i class="fa-solid fa-chevron-left"></i></button>
+          <span class="cal-month-label" id="calMonthLabel">—</span>
+          <button class="cal-nav-btn" id="nextMonth"><i class="fa-solid fa-chevron-right"></i></button>
+        </div>
+        <div class="calendar-grid" id="calGrid">
+          <!-- Populated by JS -->
+        </div>
+        <!-- Legend -->
+        <div style="margin-top:16px; display:flex; gap:12px; flex-wrap:wrap;">
+          <span style="display:flex;align-items:center;gap:5px;font-size:0.72rem;color:var(--text-muted);">
+            <span style="width:10px;height:10px;border-radius:50%;background:var(--accent-1);display:inline-block;"></span> Selected
+          </span>
+          <span style="display:flex;align-items:center;gap:5px;font-size:0.72rem;color:var(--text-muted);">
+            <span style="width:10px;height:10px;border-radius:50%;background:rgba(124,58,237,0.4);display:inline-block;"></span> Today
+          </span>
+          <span style="display:flex;align-items:center;gap:5px;font-size:0.72rem;color:var(--text-muted);">
+            <span style="width:10px;height:10px;border-radius:50%;background:var(--success);display:inline-block;"></span> Has outfit
+          </span>
+        </div>
+      </div>
+
+      <!-- ── Right: Outfit Builder ── -->
+      <div class="builder-panel" id="builderPanel">
+        <div class="no-date-selected" id="noDateMsg">
+          <i class="fa-regular fa-calendar-days"></i>
+          <h3>Select a date</h3>
+          <p>Tap any date on the calendar to start planning your outfit.</p>
+        </div>
+        <div id="builderContent" style="display:none;">
+          <!-- Header -->
+          <div class="builder-header">
+            <div class="selected-date-badge">
+              <i class="fa-regular fa-calendar"></i>
+              <span id="builderDateLabel">—</span>
+            </div>
+            <button class="btn btn-danger btn-sm" id="clearOutfitBtn" style="display:none;">
+              <i class="fa-solid fa-trash-can"></i> Clear Outfit
+            </button>
+          </div>
+
+          <!-- Category Sections: Top Bottom Shoes Accessories -->
+          <div id="catSections">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- Footer -->
+          <div class="builder-footer">
+            <div class="outfit-preview-mini" id="outfitPreviewMini"></div>
+            <button class="btn btn-primary" id="saveOutfitBtn" style="margin-left:auto;">
+              <i class="fa-solid fa-floppy-disk"></i> Save Outfit
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast-container"></div>
+
+<script src="js/firebase-config.js"></script>
+<script src="js/planner.js"></script>
+</body>
+</html>

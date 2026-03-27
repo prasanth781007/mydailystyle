@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Store – MyDailyStyle</title>
+  <meta name="description" content="Manage your digital wardrobe. Upload, tag, and organise your clothing items." />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    .store-toolbar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .upload-camera-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    .camera-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-md);
+      background: var(--bg-glass);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: var(--transition);
+      font-family: 'Inter', sans-serif;
+    }
+    .camera-btn:hover { background: rgba(124,58,237,0.1); border-color: var(--accent-2); color: var(--text-primary); }
+    .camera-btn input { display: none; }
+    .upload-img-preview-wrap { position: relative; display: inline-block; }
+    .upload-img-preview-wrap .remove-preview {
+      position: absolute; top: 6px; right: 6px;
+      width: 28px; height: 28px;
+      background: rgba(239,68,68,0.8); color: white;
+      border: none; border-radius: 50%;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem;
+    }
+    .cat-section-title {
+      font-size: 1rem; font-weight: 700;
+      padding: 14px 0 10px;
+      display: flex; align-items: center; gap: 8px;
+      border-bottom: 1px solid var(--border-glass);
+      margin-bottom: 16px;
+    }
+    .confirm-delete-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 6000;
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+      display: none;
+    }
+    .confirm-delete-overlay.open { display: flex; }
+    .confirm-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-lg);
+      padding: 30px;
+      text-align: center;
+      max-width: 360px;
+      width: 100%;
+    }
+    .confirm-box i { font-size: 2.5rem; color: #ef4444; margin-bottom: 12px; display: block; }
+    .confirm-box h3 { font-size: 1.1rem; margin-bottom: 8px; }
+    .confirm-box p { color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 24px; }
+    .confirm-box-btns { display: flex; gap: 10px; justify-content: center; }
+  </style>
+</head>
+<body>
+
+<!-- ── Top Navigation ── -->
+<nav class="navbar">
+  <a href="dashboard.html" class="navbar-brand">
+    <div class="navbar-logo"><i class="fa-solid fa-shirt"></i></div>
+    <span class="navbar-title">MyDailyStyle</span>
+  </a>
+  <ul class="navbar-nav">
+    <li><a href="dashboard.html" class="nav-link"><i class="fa-solid fa-house"></i> Dashboard</a></li>
+    <li><a href="store.html"     class="nav-link active"><i class="fa-solid fa-store"></i> Store</a></li>
+    <li><a href="planner.html"   class="nav-link"><i class="fa-regular fa-calendar"></i> Planner</a></li>
+  </ul>
+  <div class="navbar-user">
+    <div class="user-avatar" id="userAvatar">?</div>
+    <button class="btn btn-secondary btn-sm" onclick="logoutUser()">
+      <i class="fa-solid fa-right-from-bracket"></i> Logout
+    </button>
+  </div>
+</nav>
+
+<!-- ── Mobile Bottom Nav ── -->
+<nav class="bottom-nav">
+  <a href="dashboard.html" class="bottom-nav-item"><i class="fa-solid fa-house"></i><span>Home</span></a>
+  <a href="store.html"     class="bottom-nav-item active"><i class="fa-solid fa-store"></i><span>Store</span></a>
+  <a href="planner.html"   class="bottom-nav-item"><i class="fa-regular fa-calendar"></i><span>Planner</span></a>
+</nav>
+
+<div class="page-wrapper">
+  <div class="container">
+
+    <!-- Header -->
+    <div class="section-header fade-in-up">
+      <div>
+        <h1 class="section-title"><i class="fa-solid fa-store gradient-text" style="margin-right:8px;"></i>My Store</h1>
+        <p class="section-subtitle">Your digital wardrobe — <span id="storeCountLabel">0</span> items</p>
+      </div>
+      <button class="btn btn-primary" id="openAddModal">
+        <i class="fa-solid fa-plus"></i> Add Item
+      </button>
+    </div>
+
+    <!-- Toolbar: Search + Filters -->
+    <div class="store-toolbar fade-in-up delay-1">
+      <div class="search-wrapper" style="flex:1;min-width:200px;">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input id="storeSearch" type="text" class="search-input" placeholder="Search by name…" />
+      </div>
+      <div class="filter-tabs" id="filterTabs">
+        <button class="filter-tab active" data-cat="all">All</button>
+        <button class="filter-tab" data-cat="top"><i class="fa-solid fa-shirt"></i> Tops</button>
+        <button class="filter-tab" data-cat="bottom"><i class="fa-solid fa-person-dress"></i> Bottoms</button>
+        <button class="filter-tab" data-cat="shoes"><i class="fa-solid fa-shoe-prints"></i> Shoes</button>
+        <button class="filter-tab" data-cat="accessories"><i class="fa-solid fa-gem"></i> Accessories</button>
+      </div>
+    </div>
+
+    <!-- Store Grid -->
+    <div class="grid-auto fade-in-up delay-2" id="storeGrid">
+      <div style="grid-column:1/-1; text-align:center; padding:40px;">
+        <div class="spinner"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════ ADD ITEM MODAL ══════════════ -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">Add New Item</h2>
+      <button class="modal-close" id="closeAddModal"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <form id="addItemForm" novalidate>
+
+        <!-- Category selector (visual) -->
+        <div class="form-group">
+          <label class="form-label">Category *</label>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;" id="catSelector">
+            <label class="cat-pick-btn" data-cat="top">
+              <input type="radio" name="category" value="top" style="display:none;" required />
+              <i class="fa-solid fa-shirt"></i>
+              <span>Top</span>
+              <small>Shirt / T-shirt</small>
+            </label>
+            <label class="cat-pick-btn" data-cat="bottom">
+              <input type="radio" name="category" value="bottom" style="display:none;" />
+              <i class="fa-solid fa-person-dress"></i>
+              <span>Bottom</span>
+              <small>Pant / Jeans</small>
+            </label>
+            <label class="cat-pick-btn" data-cat="shoes">
+              <input type="radio" name="category" value="shoes" style="display:none;" />
+              <i class="fa-solid fa-shoe-prints"></i>
+              <span>Shoes</span>
+              <small>Sneakers / Formal</small>
+            </label>
+            <label class="cat-pick-btn" data-cat="accessories">
+              <input type="radio" name="category" value="accessories" style="display:none;" />
+              <i class="fa-solid fa-gem"></i>
+              <span>Accessories</span>
+              <small>Watch / Belt / Hat</small>
+            </label>
+          </div>
+        </div>
+
+        <!-- Item name -->
+        <div class="form-group">
+          <label class="form-label" for="itemName">Item Name *</label>
+          <div class="input-icon-wrap">
+            <i class="fa-solid fa-tag input-icon"></i>
+            <input id="itemName" type="text" class="form-input" placeholder='e.g. "Black Slim-Fit Pant"' required />
+          </div>
+        </div>
+
+        <!-- Image upload: Camera or Gallery -->
+        <div class="form-group">
+          <label class="form-label">Upload Image</label>
+
+          <!-- Drag & Drop Zone -->
+          <div class="upload-zone" id="uploadZone">
+            <input type="file" id="itemImageGallery" accept="image/*" />
+            <div class="upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+            <div class="upload-text"><strong>Drag & drop</strong> or click to browse</div>
+            <div class="upload-hint">PNG, JPG, WEBP up to 10 MB</div>
+          </div>
+
+          <!-- Camera / Gallery buttons -->
+          <div class="upload-camera-row">
+            <label class="camera-btn">
+              <i class="fa-solid fa-camera"></i> Take Photo
+              <input type="file" id="itemImageCamera" accept="image/*" capture="environment" />
+            </label>
+            <label class="camera-btn">
+              <i class="fa-solid fa-images"></i> Choose from Gallery
+              <input type="file" id="itemImageGallery2" accept="image/*" />
+            </label>
+          </div>
+
+          <!-- Preview -->
+          <div id="previewWrap" style="margin-top:14px; display:none;">
+            <div class="upload-img-preview-wrap">
+              <img id="previewImg" src="" alt="Preview" style="width:100%; max-height:220px; object-fit:cover; border-radius:12px;" />
+              <button class="remove-preview" type="button" id="removePreview"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <div id="addItemError" style="color:#f87171;font-size:0.82rem;margin-bottom:12px;"></div>
+
+        <!-- Upload progress -->
+        <div id="uploadProgress" style="display:none; margin-bottom:12px;">
+          <div style="height:4px;background:var(--border-glass);border-radius:2px;overflow:hidden;">
+            <div id="progressBar" style="height:100%;background:linear-gradient(90deg,var(--accent-1),var(--accent-2));width:0%;transition:width 0.3s ease;border-radius:2px;"></div>
+          </div>
+          <p style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;" id="progressText">Uploading…</p>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button type="button" class="btn btn-secondary" id="cancelAdd">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="saveItemBtn">
+            <i class="fa-solid fa-floppy-disk"></i> Save to Store
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ CONFIRM DELETE ══════════════ -->
+<div class="confirm-delete-overlay" id="confirmDeleteOverlay">
+  <div class="confirm-box">
+    <i class="fa-solid fa-trash-can"></i>
+    <h3>Delete this item?</h3>
+    <p>This will remove it from your Store permanently. Any scheduled outfits using this item will lose this slot.</p>
+    <div class="confirm-box-btns">
+      <button class="btn btn-secondary" id="cancelDelete">Cancel</button>
+      <button class="btn btn-danger" id="confirmDelete">Yes, Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast-container"></div>
+
+<style>
+  .cat-pick-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 16px;
+    border: 2px solid var(--border-glass);
+    border-radius: var(--radius-md);
+    background: var(--bg-glass);
+    cursor: pointer;
+    transition: var(--transition);
+    text-align: center;
+  }
+  .cat-pick-btn:hover { border-color: var(--accent-2); }
+  .cat-pick-btn.selected {
+    border-color: var(--accent-2);
+    background: rgba(124,58,237,0.12);
+  }
+  .cat-pick-btn i { font-size: 1.4rem; color: var(--accent-3); }
+  .cat-pick-btn span { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+  .cat-pick-btn small { font-size: 0.72rem; color: var(--text-muted); }
+</style>
+
+<script src="js/firebase-config.js"></script>
+<script src="js/store.js"></script>
+</body>
+</html>

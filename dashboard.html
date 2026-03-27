@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard – MyDailyStyle</title>
+  <meta name="description" content="View your today's outfit and plan your week with MyDailyStyle dashboard." />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    /* Dashboard hero */
+    .dash-hero {
+      background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(236,72,153,0.1));
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-xl);
+      padding: 36px;
+      margin-bottom: 36px;
+      position: relative;
+      overflow: hidden;
+    }
+    .dash-hero::before {
+      content: '';
+      position: absolute;
+      top: -60px; right: -60px;
+      width: 200px; height: 200px;
+      background: radial-gradient(circle, rgba(124,58,237,0.25), transparent 70%);
+      border-radius: 50%;
+    }
+    .dash-hero-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .dash-greeting { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px; }
+    .dash-user-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 2rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .dash-date {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .today-badge {
+      padding: 6px 14px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    /* Quick stats */
+    .quick-stats {
+      display: grid;
+      grid-template-columns: repeat(3,1fr);
+      gap: 16px;
+      margin-bottom: 36px;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      transition: var(--transition);
+    }
+    .stat-card:hover { border-color: var(--accent-2); transform: translateY(-2px); }
+    .stat-icon {
+      width: 48px; height: 48px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.3rem;
+      flex-shrink: 0;
+    }
+    .stat-icon-purple { background: rgba(124,58,237,0.15); color: var(--accent-3); }
+    .stat-icon-pink   { background: rgba(236,72,153,0.15); color: #f472b6; }
+    .stat-icon-gold   { background: rgba(245,158,11,0.15); color: #fbbf24; }
+    .stat-value { font-size: 1.6rem; font-weight: 800; line-height: 1; }
+    .stat-label { font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px; }
+    /* No outfit state */
+    .no-outfit-state {
+      text-align: center;
+      padding: 40px;
+    }
+    .no-outfit-state i {
+      font-size: 4rem;
+      background: linear-gradient(135deg, var(--accent-1), var(--accent-pink));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 16px;
+      display: block;
+    }
+    .no-outfit-state h3 { font-size: 1.2rem; font-weight: 600; margin-bottom: 8px; color: var(--text-primary); }
+    .no-outfit-state p  { color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 20px; }
+    /* History cards */
+    .history-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      transition: var(--transition);
+      cursor: pointer;
+    }
+    .history-item:hover { border-color: var(--accent-2); transform: translateY(-2px); }
+    .history-thumbs {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .history-thumb {
+      width: 50px; height: 50px;
+      border-radius: 8px;
+      object-fit: cover;
+      border: 1px solid var(--border-glass);
+    }
+    .history-thumb-placeholder {
+      width: 50px; height: 50px;
+      border-radius: 8px;
+      background: var(--bg-glass);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-muted);
+      font-size: 1rem;
+      border: 1px solid var(--border-glass);
+    }
+    .history-info { flex: 1; min-width: 0; }
+    .history-date { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px; }
+    .history-names { font-size: 0.85rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    @media (max-width: 768px) {
+      .quick-stats { grid-template-columns: repeat(2,1fr); }
+      .dash-hero { padding: 24px; }
+      .dash-user-name { font-size: 1.5rem; }
+      .outfit-display { grid-template-columns: repeat(2,1fr); }
+    }
+    @media (max-width: 480px) {
+      .quick-stats { grid-template-columns: 1fr; }
+      .history-thumbs { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Top Navigation ── -->
+<nav class="navbar">
+  <a href="dashboard.html" class="navbar-brand">
+    <div class="navbar-logo"><i class="fa-solid fa-shirt"></i></div>
+    <span class="navbar-title">MyDailyStyle</span>
+  </a>
+  <ul class="navbar-nav">
+    <li><a href="dashboard.html" class="nav-link active"><i class="fa-solid fa-house"></i> Dashboard</a></li>
+    <li><a href="store.html"     class="nav-link"><i class="fa-solid fa-store"></i> Store</a></li>
+    <li><a href="planner.html"   class="nav-link"><i class="fa-regular fa-calendar"></i> Planner</a></li>
+  </ul>
+  <div class="navbar-user">
+    <div class="user-avatar" id="userAvatar">?</div>
+    <button class="btn btn-secondary btn-sm" onclick="logoutUser()">
+      <i class="fa-solid fa-right-from-bracket"></i> Logout
+    </button>
+  </div>
+</nav>
+
+<!-- ── Mobile Bottom Nav ── -->
+<nav class="bottom-nav">
+  <a href="dashboard.html" class="bottom-nav-item active"><i class="fa-solid fa-house"></i><span>Home</span></a>
+  <a href="store.html"     class="bottom-nav-item"><i class="fa-solid fa-store"></i><span>Store</span></a>
+  <a href="planner.html"   class="bottom-nav-item"><i class="fa-regular fa-calendar"></i><span>Planner</span></a>
+</nav>
+
+<div class="page-wrapper">
+  <div class="container">
+
+    <!-- ── HERO: Today's Outfit ── -->
+    <div class="dash-hero fade-in-up">
+      <div class="dash-hero-top">
+        <div>
+          <p class="dash-greeting">Good <span id="timeGreeting">Day</span>, 👋</p>
+          <h1 class="dash-user-name gradient-text" id="dashUserName">Loading…</h1>
+          <p class="dash-date"><i class="fa-regular fa-calendar"></i><span id="dashDate">—</span></p>
+        </div>
+        <span class="today-badge">Today's Outfit</span>
+      </div>
+
+      <!-- Outfit display grid (4 slots) -->
+      <div id="todayOutfit" class="outfit-display">
+        <!-- Populated by dashboard.js -->
+      </div>
+
+      <!-- Action buttons -->
+      <div id="dashActions" style="margin-top:24px; display:flex; gap:12px; flex-wrap:wrap;">
+        <a href="planner.html" class="btn btn-primary">
+          <i class="fa-solid fa-plus"></i> Plan Today's Look
+        </a>
+        <a href="store.html" class="btn btn-secondary">
+          <i class="fa-solid fa-store"></i> Manage Store
+        </a>
+      </div>
+    </div>
+
+    <!-- ── Quick Stats ── -->
+    <div class="quick-stats fade-in-up delay-1">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-purple"><i class="fa-solid fa-shirt"></i></div>
+        <div>
+          <div class="stat-value" id="statItems">—</div>
+          <div class="stat-label">Items in Store</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-pink"><i class="fa-solid fa-calendar-check"></i></div>
+        <div>
+          <div class="stat-value" id="statPlanned">—</div>
+          <div class="stat-label">Days Planned</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-gold"><i class="fa-solid fa-clock-rotate-left"></i></div>
+        <div>
+          <div class="stat-value" id="statHistory">—</div>
+          <div class="stat-label">Past Outfits</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Upcoming Outfits ── -->
+    <div class="fade-in-up delay-2" style="margin-bottom:36px;">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title"><i class="fa-solid fa-calendar-week" style="color:var(--accent-3);margin-right:8px;"></i>Upcoming Outfits</h2>
+          <p class="section-subtitle">Your next 7 days planned</p>
+        </div>
+        <a href="planner.html" class="btn btn-secondary btn-sm">View All</a>
+      </div>
+      <div id="upcomingList" style="display:flex; flex-direction:column; gap:10px;">
+        <div class="spinner"></div>
+      </div>
+    </div>
+
+    <!-- ── Previous Outfits / History ── -->
+    <div class="fade-in-up delay-3">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title"><i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-gold);margin-right:8px;"></i>Previous Outfits</h2>
+          <p class="section-subtitle">What you wore before</p>
+        </div>
+      </div>
+      <div id="historyList" style="display:flex; flex-direction:column; gap:10px;">
+        <div class="spinner"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container"></div>
+
+<script src="js/firebase-config.js"></script>
+<script src="js/dashboard.js"></script>
+</body>
+</html>
