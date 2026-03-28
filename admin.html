@@ -59,6 +59,47 @@
       padding: 100px 20px;
     }
     .error-gate i { font-size: 4rem; color: var(--error); margin-bottom: 20px; }
+    
+    /* View Modals */
+    .view-modal-body {
+      max-height: 70vh;
+      overflow-y: auto;
+      padding: 0;
+    }
+    .user-store-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 15px;
+      padding: 20px;
+    }
+    .user-store-item {
+      background: rgba(255,255,255,0.03);
+      border-radius: 12px;
+      padding: 8px;
+      text-align: center;
+      border: 1px solid var(--border-glass);
+    }
+    .user-store-item img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+    .user-planner-list {
+      padding: 20px;
+    }
+    .planner-row {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      padding: 12px;
+      border-bottom: 1px solid var(--border-glass);
+    }
+    .planner-row:last-child { border-bottom: none; }
+    .planner-date { font-weight: 700; min-width: 100px; }
+    .planner-thumbs { display: flex; gap: 5px; }
+    .planner-thumb { width: 30px; height: 30px; border-radius: 4px; object-fit: cover; border: 1px solid var(--border-glass); }
   </style>
 </head>
 <body>
@@ -122,6 +163,7 @@
             <th>Email</th>
             <th>Items</th>
             <th>Planned</th>
+            <th>Details</th>
             <th>Joined</th>
             <th>Actions</th>
           </tr>
@@ -141,6 +183,44 @@
   <p>You do not have administrative privileges to view this page.</p>
   <a href="dashboard.html" class="btn btn-primary" style="margin-top:20px;">Return to Dashboard</a>
 </div>
+
+</div>
+
+<!-- ═════════ VIEW STORE MODAL ═════════ -->
+<div class="modal-overlay" id="viewStoreModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="storeModalTitle">User Store</h2>
+      <button class="modal-close" onclick="closeModal('viewStoreModal')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="view-modal-body">
+      <div id="userStoreGrid" class="user-store-grid">
+        <!-- Loaded via JS -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═════════ VIEW PLANNER MODAL ═════════ -->
+<div class="modal-overlay" id="viewPlannerModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="plannerModalTitle">User Planner</h2>
+      <button class="modal-close" onclick="closeModal('viewPlannerModal')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="view-modal-body">
+      <div id="userPlannerList" class="user-planner-list">
+        <!-- Loaded via JS -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+  }
+</script>
 
 <script src="js/firebase-config.js"></script>
 <script src="js/admin.js"></script>

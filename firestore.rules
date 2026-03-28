@@ -1,0 +1,44 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: Check if the user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper: Check if the user owns the data
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Helper: Check if the user is an admin
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.email == 'prasanth.kum22@gmail.com'
+      );
+    }
+
+    // ── User Profiles ─────────────────────────────────────
+    match /users/{userId} {
+      // Allow read/write for owners & admins
+      allow read, write: if isSignedIn() && (isOwner(userId) || isAdmin());
+
+      // ── User's Store (Wardrobe Items) ────────────────────
+      match /store/{itemId} {
+        allow read, write: if isSignedIn() && (isOwner(userId) || isAdmin());
+      }
+
+      // ── User's Schedule (Planner) ────────────────────────
+      match /schedule/{dateId} {
+        allow read, write: if isSignedIn() && (isOwner(userId) || isAdmin());
+      }
+    }
+
+    // ── Global Read for Admin (Used for listing all users) ──
+    match /users/{userId} {
+      allow list: if isAdmin();
+    }
+  }
+}

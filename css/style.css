@@ -225,6 +225,8 @@ body {
   font-size: 0.85rem;
   cursor: pointer;
 }
+.user-avatar-link { text-decoration: none; display: flex; align-items: center; color: inherit; }
+.user-avatar-link:hover .user-avatar { transform: scale(1.05); }
 
 /* Bottom Mobile Nav */
 .bottom-nav {

@@ -2,11 +2,6 @@
 //  store.js – MyDailyStyle Store (Inventory) Logic
 // ============================================================
 
-const CATS  = ['top','bottom','shoes','accessories'];
-const CAT_ICONS = { top:'fa-shirt', bottom:'fa-person-dress', shoes:'fa-shoe-prints', accessories:'fa-gem' };
-const CAT_LABELS= { top:'Top',     bottom:'Bottom',          shoes:'Shoes',          accessories:'Accessories' };
-const CAT_BADGE = { top:'cat-top', bottom:'cat-bottom',      shoes:'cat-shoes',      accessories:'cat-accessories' };
-
 // Toast helper
 function showToast(msg, type='info') {
   const c = document.getElementById('toast-container');
@@ -20,79 +15,194 @@ function showToast(msg, type='info') {
 
 // ── State ─────────────────────────────────────────────────
 let allItems    = [];
+let customCats  = [];     // [{ id, name, base }]
 let activeFilter= 'all';
 let searchQuery = '';
-let pendingFile = null;   // File object for upload
+let pendingFile = null;
 let uid         = null;
 let pendingDeleteId = null;
+
+const BASE_CATS = ['top','bottom','shoes','accessories'];
+const CAT_ICONS = { top:'fa-shirt', bottom:'fa-person-dress', shoes:'fa-shoe-prints', accessories:'fa-gem' };
+const CAT_LABELS= { top:'Top',     bottom:'Bottom',          shoes:'Shoes',          accessories:'Accessories' };
+const CAT_BADGE = { top:'cat-top', bottom:'cat-bottom',      shoes:'cat-shoes',      accessories:'cat-accessories' };
 
 // ── Auth Guard ─────────────────────────────────────────────
 requireAuth(async user => {
   uid = user.uid;
 
   // Set avatar
-  const initials = (user.displayName || user.email || 'U')
-    .split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+  const initials = (user.displayName || user.email || 'U').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
   document.getElementById('userAvatar').textContent = initials;
 
-  // Load store items
-  await loadStore();
+  // Load everything
+  await Promise.all([loadCategories(), loadStore()]);
   setupListeners();
 });
+
+// ── Categories Logic ───────────────────────────────────────
+async function loadCategories() {
+  try {
+    const snap = await db.collection('users').doc(uid).collection('categories').get();
+    customCats = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    renderCategoryUI();
+  } catch (err) {
+    console.error("Error loading categories:", err);
+  }
+}
+
+function renderCategoryUI() {
+  // 1. Render Manage Modal List
+  const list = document.getElementById('customCatsList');
+  if (customCats.length === 0) {
+    list.innerHTML = '<p style="text-align:center;color:var(--text-muted);font-size:0.8rem;padding:20px;">No custom categories yet.</p>';
+  } else {
+    list.innerHTML = customCats.map(c => `
+      <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-glass);padding:10px 15px;border-radius:10px;border:1px solid var(--border-glass);">
+        <div>
+          <span style="font-weight:600;font-size:0.9rem;">${c.name}</span>
+          <small style="color:var(--text-muted);margin-left:8px;">(in ${CAT_LABELS[c.base]})</small>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="deleteCategory('${c.id}')" style="padding:5px 10px;color:var(--error);"><i class="fa-solid fa-trash-can"></i></button>
+      </div>
+    `).join('');
+  }
+
+  // 2. Render Add Item Form Selector
+  const selector = document.getElementById('catSelector');
+  let html = '';
+  
+  // Add Base Cats
+  BASE_CATS.forEach(c => {
+    html += `
+      <label class="cat-pick-btn" data-cat="${c}">
+        <input type="radio" name="category" value="${c}" style="display:none;" required />
+        <i class="fa-solid ${CAT_ICONS[c]}"></i>
+        <span>${CAT_LABELS[c]}</span>
+        <small>Primary ${CAT_LABELS[c]}</small>
+      </label>`;
+  });
+
+  // Add Custom Cats
+  customCats.forEach(c => {
+    html += `
+      <label class="cat-pick-btn" data-cat="${c.id}">
+        <input type="radio" name="category" value="${c.id}" style="display:none;" />
+        <i class="fa-solid ${CAT_ICONS[c.base]}"></i>
+        <span>${c.name}</span>
+        <small>${CAT_LABELS[c.base]} Type</small>
+      </label>`;
+  });
+  selector.innerHTML = html;
+
+  // Re-attach listeners to new radio buttons
+  selector.querySelectorAll('.cat-pick-btn').forEach(lbl => {
+    lbl.addEventListener('click', () => {
+      selector.querySelectorAll('.cat-pick-btn').forEach(l => l.classList.remove('selected'));
+      lbl.classList.add('selected');
+      lbl.querySelector('input').checked = true;
+    });
+  });
+
+  // 3. Render Filter Tabs
+  const filters = document.getElementById('filterTabs');
+  let filterHtml = '<button class="filter-tab active" data-cat="all">All</button>';
+  BASE_CATS.forEach(c => {
+    filterHtml += `<button class="filter-tab" data-cat="${c}">${CAT_LABELS[c]}s</button>`;
+  });
+  customCats.forEach(c => {
+    filterHtml += `<button class="filter-tab" data-cat="${c.id}">${c.name}</button>`;
+  });
+  filters.innerHTML = filterHtml;
+
+  // Re-attach listeners to new filter tabs
+  filters.querySelectorAll('.filter-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      filters.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      activeFilter = tab.dataset.cat;
+      renderStore();
+    });
+  });
+}
+
+async function deleteCategory(id) {
+  if (!confirm("Are you sure? Items in this category will still exist but will be un-categorized.")) return;
+  try {
+    await db.collection('users').doc(uid).collection('categories').doc(id).delete();
+    showToast("Category removed.", "info");
+    await loadCategories();
+  } catch (err) {
+    showToast("Failed to delete category.", "error");
+  }
+}
 
 // ── Load + Render Store ────────────────────────────────────
 async function loadStore() {
   const grid = document.getElementById('storeGrid');
   grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;"><div class="spinner"></div></div>';
   try {
-    const snap = await db.collection('users').doc(uid).collection('store')
-      .orderBy('createdAt','desc').get();
+    const snap = await db.collection('users').doc(uid).collection('store').orderBy('createdAt','desc').get();
     allItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     document.getElementById('storeCountLabel').textContent = allItems.length;
     renderStore();
   } catch (err) {
     grid.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px;">Failed to load store.</p>';
-    console.error(err);
   }
 }
 
 function renderStore() {
   const grid  = document.getElementById('storeGrid');
   let filtered = allItems.filter(item => {
-    const matchCat  = activeFilter === 'all' || item.category === activeFilter;
-    const matchName = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchCat && matchName;
+    // Check if match specific category OR if filter is a base category, check if item's category maps to it
+    if (activeFilter === 'all') return item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const isBaseFilter = BASE_CATS.includes(activeFilter);
+    let matchCat = false;
+    
+    if (isBaseFilter) {
+      // If item is base cat, match directly. If item is custom cat, check if its base matches the filter.
+      if (item.category === activeFilter) matchCat = true;
+      else {
+        const custom = customCats.find(c => c.id === item.category);
+        if (custom && custom.base === activeFilter) matchCat = true;
+      }
+    } else {
+      // It's a custom filter
+      matchCat = (item.category === activeFilter);
+    }
+    
+    return matchCat && item.name.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   if (filtered.length === 0) {
-    grid.innerHTML = `
-      <div class="empty-state">
-        <i class="fa-solid fa-shirt"></i>
-        <h3>No items found</h3>
-        <p>${allItems.length === 0 ? 'Add your first item to get started!' : 'Try a different filter or search term.'}</p>
-      </div>`;
+    grid.innerHTML = `<div class="empty-state"><i class="fa-solid fa-shirt"></i><h3>No items found</h3><p>Add your first item to get started!</p></div>`;
     return;
   }
 
-  grid.innerHTML = filtered.map(item => `
+  grid.innerHTML = filtered.map(item => {
+    const isCustom = !BASE_CATS.includes(item.category);
+    const catObj   = isCustom ? (customCats.find(c => c.id === item.category) || { name:'Custom', base:'top' }) : null;
+    const baseIcon = isCustom ? CAT_ICONS[catObj.base] : CAT_ICONS[item.category];
+    const badgeLabel = isCustom ? catObj.name : CAT_LABELS[item.category];
+    const badgeClass = isCustom ? CAT_BADGE[catObj.base] : CAT_BADGE[item.category];
+
+    return `
     <div class="item-card" data-id="${item.id}">
       ${item.imageUrl
-        ? `<img src="${item.imageUrl}" alt="${item.name}" class="item-card-img" loading="lazy" />`
-        : `<div class="item-card-img-placeholder"><i class="fa-solid ${CAT_ICONS[item.category]}"></i></div>`
+        ? `<img src="${item.imageUrl}" alt="${item.name}" class="item-card-img" />`
+        : `<div class="item-card-img-placeholder"><i class="fa-solid ${baseIcon}"></i></div>`
       }
       <div class="item-card-body">
         <div class="item-card-name">${item.name}</div>
-        <span class="category-badge ${CAT_BADGE[item.category]}">${CAT_LABELS[item.category]}</span>
+        <span class="category-badge ${badgeClass}">${badgeLabel}</span>
       </div>
       <div class="item-card-actions">
-        <button class="item-card-btn item-card-btn-del" data-id="${item.id}" title="Delete">
-          <i class="fa-solid fa-trash-can"></i>
-        </button>
+        <button class="item-card-btn item-card-btn-del" data-id="${item.id}" title="Delete"><i class="fa-solid fa-trash-can"></i></button>
       </div>
-    </div>`
-  ).join('');
+    </div>`;
+  }).join('');
 
-  // Attach delete listeners
   grid.querySelectorAll('.item-card-btn-del').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
@@ -102,105 +212,107 @@ function renderStore() {
   });
 }
 
-// ── Setup Listeners ────────────────────────────────────────
+// ── Listeners ──────────────────────────────────────────────
 function setupListeners() {
+  document.getElementById('storeSearch').addEventListener('input', e => { searchQuery = e.target.value; renderStore(); });
 
-  // Search
-  document.getElementById('storeSearch').addEventListener('input', e => {
-    searchQuery = e.target.value;
-    renderStore();
-  });
-
-  // Filter tabs
-  document.querySelectorAll('#filterTabs .filter-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('#filterTabs .filter-tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      activeFilter = tab.dataset.cat;
-      renderStore();
-    });
-  });
-
-  // Add modal open / close
   document.getElementById('openAddModal').addEventListener('click', () => openModal());
   document.getElementById('closeAddModal').addEventListener('click', closeModal);
   document.getElementById('cancelAdd').addEventListener('click', closeModal);
-  document.getElementById('addModal').addEventListener('click', e => {
-    if (e.target === document.getElementById('addModal')) closeModal();
+  document.getElementById('addModal').addEventListener('click', e => { if (e.target.id === 'addModal') closeModal(); });
+
+  // Manage Cats Modal
+  document.getElementById('openManageCats').addEventListener('click', () => document.getElementById('manageCatsModal').classList.add('open'));
+  document.getElementById('closeManageCats').addEventListener('click', () => document.getElementById('manageCatsModal').classList.remove('open'));
+
+  // Add Category
+  document.getElementById('addCatForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const name = document.getElementById('newCatName').value.trim();
+    const base = document.getElementById('newCatBase').value;
+    const btn  = document.getElementById('saveCatBtn');
+    if (!name) return;
+
+    btn.disabled = true;
+    try {
+      await db.collection('users').doc(uid).collection('categories').add({ name, base, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+      document.getElementById('addCatForm').reset();
+      showToast("Category added!", "success");
+      await loadCategories();
+    } catch (err) {
+      showToast("Error adding category.", "error");
+    } finally {
+      btn.disabled = false;
+    }
   });
 
-  // Category picker
-  document.querySelectorAll('#catSelector .cat-pick-btn').forEach(lbl => {
-    lbl.addEventListener('click', () => {
-      document.querySelectorAll('#catSelector .cat-pick-btn').forEach(l => l.classList.remove('selected'));
-      lbl.classList.add('selected');
-      lbl.querySelector('input').checked = true;
-    });
-  });
-
-  // Image preview via gallery / drag & drop / camera
+  // Image helpers
   function handleFile(file) {
     if (!file || !file.type.startsWith('image/')) return;
     pendingFile = file;
     const reader = new FileReader();
-    reader.onload = e => {
-      document.getElementById('previewImg').src = e.target.result;
-      document.getElementById('previewWrap').style.display = 'block';
-    };
+    reader.onload = e => { document.getElementById('previewImg').src = e.target.result; document.getElementById('previewWrap').style.display = 'block'; };
     reader.readAsDataURL(file);
   }
-
   ['itemImageGallery','itemImageCamera','itemImageGallery2'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', e => handleFile(e.target.files[0]));
   });
 
-  // Drag-and-drop on upload zone
+  // Auto-categorize (updated to suggest based on keywords)
+  document.getElementById('itemName').addEventListener('input', e => {
+    const name = e.target.value.toLowerCase();
+    const keywords = {
+      top: ['shirt', 'top', 'hoodie', 'jacket', 't-shirt', 'kurta'],
+      bottom: ['pant', 'jeans', 'shorts', 'skirt', 'joggers'],
+      shoes: ['shoe', 'sneaker', 'boot', 'sandal'],
+      accessories: ['watch', 'belt', 'hat', 'bag', 'jewelry']
+    };
+    let guess = null;
+    for (const [cat, words] of Object.entries(keywords)) { if (words.some(w => name.includes(w))) { guess = cat; break; } }
+    
+    if (guess) {
+      document.getElementById('catGuessHint').style.display = 'inline';
+      // Highlight the first match found in selector
+      const lbl = document.querySelector(`#catSelector .cat-pick-btn[data-cat="${guess}"]`);
+      if (lbl) {
+        document.querySelectorAll('#catSelector .cat-pick-btn').forEach(l => l.classList.remove('selected'));
+        lbl.classList.add('selected');
+        lbl.querySelector('input').checked = true;
+      }
+    } else {
+      document.getElementById('catGuessHint').style.display = 'none';
+    }
+  });
+
   const zone = document.getElementById('uploadZone');
   zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.borderColor='var(--accent-2)'; });
   zone.addEventListener('dragleave', () => { zone.style.borderColor=''; });
-  zone.addEventListener('drop', e => {
-    e.preventDefault(); zone.style.borderColor='';
-    handleFile(e.dataTransfer.files[0]);
-  });
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.style.borderColor=''; handleFile(e.dataTransfer.files[0]); });
 
-  // Remove preview
   document.getElementById('removePreview').addEventListener('click', () => {
     pendingFile = null;
     document.getElementById('previewWrap').style.display = 'none';
-    document.getElementById('previewImg').src = '';
-    ['itemImageGallery','itemImageCamera','itemImageGallery2'].forEach(id => {
-      const el = document.getElementById(id); if (el) el.value = '';
-    });
+    ['itemImageGallery','itemImageCamera','itemImageGallery2'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   });
 
-  // Save item form
   document.getElementById('addItemForm').addEventListener('submit', saveItem);
-
-  // Confirm delete
-  document.getElementById('cancelDelete').addEventListener('click', () => {
-    pendingDeleteId = null;
-    document.getElementById('confirmDeleteOverlay').classList.remove('open');
-  });
+  document.getElementById('cancelDelete').addEventListener('click', () => { pendingDeleteId = null; document.getElementById('confirmDeleteOverlay').classList.remove('open'); });
   document.getElementById('confirmDelete').addEventListener('click', deleteItem);
 }
 
-// ── Modal helpers ──────────────────────────────────────────
 function openModal() {
   document.getElementById('addItemForm').reset();
   document.getElementById('addItemError').textContent = '';
   document.getElementById('previewWrap').style.display = 'none';
-  document.getElementById('previewImg').src = '';
   document.getElementById('uploadProgress').style.display = 'none';
+  document.getElementById('catGuessHint').style.display = 'none';
   document.querySelectorAll('#catSelector .cat-pick-btn').forEach(l => l.classList.remove('selected'));
   pendingFile = null;
   document.getElementById('addModal').classList.add('open');
 }
-function closeModal() {
-  document.getElementById('addModal').classList.remove('open');
-}
+function closeModal() { document.getElementById('addModal').classList.remove('open'); }
 
-// ── Save Item ──────────────────────────────────────────────
 async function saveItem(e) {
   e.preventDefault();
   const errEl   = document.getElementById('addItemError');
@@ -208,7 +320,6 @@ async function saveItem(e) {
   const catInput= document.querySelector('#catSelector input[name="category"]:checked');
   const name    = document.getElementById('itemName').value.trim();
 
-  errEl.innerHTML = '';
   if (!catInput) { errEl.textContent = 'Please select a category.'; return; }
   if (!name)     { errEl.textContent = 'Item name is required.'; return; }
 
@@ -217,104 +328,38 @@ async function saveItem(e) {
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
 
   let imageUrl = '';
-
-  // ── Step 1: Try Cloudinary upload ─────────────────────────
   if (pendingFile) {
     try {
       document.getElementById('uploadProgress').style.display = 'block';
-      setProgress(20, 'Uploading image…');
       imageUrl = await uploadToCloudinary(pendingFile);
-      setProgress(100, 'Upload complete!');
-    } catch (uploadErr) {
-      // Show exact Cloudinary error and offer to continue without image
-      document.getElementById('uploadProgress').style.display = 'none';
-      const cloudinaryMsg = uploadErr.message || 'Unknown upload error';
-      errEl.innerHTML = `
-        <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:12px;margin-bottom:10px;">
-          <div style="display:flex;align-items:center;gap:6px;color:#f87171;font-weight:600;margin-bottom:6px;">
-            <i class="fa-solid fa-triangle-exclamation"></i> Image upload failed
-          </div>
-          <div style="color:#fca5a5;font-size:0.8rem;margin-bottom:10px;">
-            Cloudinary error: <strong>${cloudinaryMsg}</strong>
-          </div>
-          <div style="font-size:0.78rem;color:#94a3b8;margin-bottom:10px;">
-            ⚠️ Make sure your preset <code style="color:#f472b6;background:rgba(244,114,182,0.1);padding:1px 6px;border-radius:4px;">${CLOUDINARY_CONFIG.uploadPreset}</code>
-            is set to <strong>Unsigned</strong> mode in your Cloudinary dashboard.
-          </div>
-          <button type="button" id="saveWithoutImgBtn" class="btn btn-secondary btn-sm" style="width:100%;">
-            <i class="fa-solid fa-floppy-disk"></i> Save item without image anyway
-          </button>
-        </div>`;
-
-      // Bind the fallback button
-      document.getElementById('saveWithoutImgBtn').addEventListener('click', async () => {
-        errEl.innerHTML = '';
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
-        try {
-          await db.collection('users').doc(uid).collection('store').add({
-            name,
-            category: catInput.value,
-            imageUrl: '',
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
-          showToast(`"${name}" saved (no image). Fix Cloudinary preset to upload photos.`, 'info');
-          closeModal();
-          await loadStore();
-        } catch (dbErr) {
-          errEl.textContent = 'Firestore save also failed: ' + dbErr.message;
-        } finally {
-          btn.disabled = false;
-          btn.innerHTML = orig;
-        }
-      });
-
-      btn.disabled = false;
-      btn.innerHTML = orig;
-      return; // Stop here – let user decide
+    } catch (err) {
+      errEl.textContent = "Image upload failed.";
+      btn.disabled = false; btn.innerHTML = orig; return;
     }
   }
 
-  // ── Step 2: Save to Firestore ──────────────────────────────
   try {
     await db.collection('users').doc(uid).collection('store').add({
-      name,
-      category : catInput.value,
-      imageUrl,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      name, category: catInput.value, imageUrl, createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
-
-    showToast(`"${name}" added to your Store!`, 'success');
+    showToast(`"${name}" saved!`, 'success');
     closeModal();
     await loadStore();
-  } catch (dbErr) {
-    console.error(dbErr);
-    errEl.textContent = 'Firestore error: ' + dbErr.message;
+  } catch (err) {
+    errEl.textContent = 'Error: ' + err.message;
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = orig;
-    document.getElementById('uploadProgress').style.display = 'none';
+    btn.disabled = false; btn.innerHTML = orig;
   }
 }
 
-function setProgress(pct, text) {
-  document.getElementById('progressBar').style.width  = pct + '%';
-  document.getElementById('progressText').textContent = text;
-}
-
-// ── Delete Item ────────────────────────────────────────────
 async function deleteItem() {
   if (!pendingDeleteId) return;
   document.getElementById('confirmDeleteOverlay').classList.remove('open');
   try {
     await db.collection('users').doc(uid).collection('store').doc(pendingDeleteId).delete();
-    showToast('Item deleted from Store.', 'info');
-    allItems = allItems.filter(it => it.id !== pendingDeleteId);
-    document.getElementById('storeCountLabel').textContent = allItems.length;
-    renderStore();
+    showToast('Item deleted.', 'info');
+    await loadStore();
   } catch (err) {
-    showToast('Failed to delete item.', 'error');
-  } finally {
-    pendingDeleteId = null;
+    showToast('Failed to delete.', 'error');
   }
 }

@@ -96,7 +96,9 @@
     <li><a href="planner.html"   class="nav-link"><i class="fa-regular fa-calendar"></i> Planner</a></li>
   </ul>
   <div class="navbar-user">
-    <div class="user-avatar" id="userAvatar">?</div>
+    <a href="profile.html" class="user-avatar-link" title="My Profile">
+      <div class="user-avatar" id="userAvatar">?</div>
+    </a>
     <button class="btn btn-secondary btn-sm" onclick="logoutUser()">
       <i class="fa-solid fa-right-from-bracket"></i> Logout
     </button>
@@ -119,9 +121,14 @@
         <h1 class="section-title"><i class="fa-solid fa-store gradient-text" style="margin-right:8px;"></i>My Store</h1>
         <p class="section-subtitle">Your digital wardrobe — <span id="storeCountLabel">0</span> items</p>
       </div>
-      <button class="btn btn-primary" id="openAddModal">
-        <i class="fa-solid fa-plus"></i> Add Item
-      </button>
+      <div style="display:flex;gap:12px;">
+        <button class="btn btn-secondary" id="openManageCats">
+          <i class="fa-solid fa-list-check"></i> Categories
+        </button>
+        <button class="btn btn-primary" id="openAddModal">
+          <i class="fa-solid fa-plus"></i> Add Item
+        </button>
+      </div>
     </div>
 
     <!-- Toolbar: Search + Filters -->
@@ -161,32 +168,9 @@
 
         <!-- Category selector (visual) -->
         <div class="form-group">
-          <label class="form-label">Category *</label>
-          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;" id="catSelector">
-            <label class="cat-pick-btn" data-cat="top">
-              <input type="radio" name="category" value="top" style="display:none;" required />
-              <i class="fa-solid fa-shirt"></i>
-              <span>Top</span>
-              <small>Shirt / T-shirt</small>
-            </label>
-            <label class="cat-pick-btn" data-cat="bottom">
-              <input type="radio" name="category" value="bottom" style="display:none;" />
-              <i class="fa-solid fa-person-dress"></i>
-              <span>Bottom</span>
-              <small>Pant / Jeans</small>
-            </label>
-            <label class="cat-pick-btn" data-cat="shoes">
-              <input type="radio" name="category" value="shoes" style="display:none;" />
-              <i class="fa-solid fa-shoe-prints"></i>
-              <span>Shoes</span>
-              <small>Sneakers / Formal</small>
-            </label>
-            <label class="cat-pick-btn" data-cat="accessories">
-              <input type="radio" name="category" value="accessories" style="display:none;" />
-              <i class="fa-solid fa-gem"></i>
-              <span>Accessories</span>
-              <small>Watch / Belt / Hat</small>
-            </label>
+          <label class="form-label">Category * <span id="catGuessHint" style="font-size:0.75rem; color:var(--accent-2); font-weight:400; margin-left:8px; display:none;">(Auto-detected!)</span></label>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px; max-height:260px; overflow-y:auto; padding:5px;" id="catSelector">
+            <!-- Populated by JS -->
           </div>
         </div>
 
@@ -253,6 +237,36 @@
   </div>
 </div>
 
+<!-- ══════════════ MANAGE CATEGORIES MODAL ══════════════ -->
+<div class="modal-overlay" id="manageCatsModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">Manage Categories</h2>
+      <button class="modal-close" id="closeManageCats" onclick="document.getElementById('manageCatsModal').classList.remove('open')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:20px;">
+        Add custom categories (e.g., Ethnic, Sportswear) and link them to a base type.
+      </p>
+      
+      <form id="addCatForm" style="display:flex; gap:10px; margin-bottom:25px; flex-wrap:wrap;">
+        <input type="text" id="newCatName" class="form-input" placeholder="Category name..." required style="flex:2; min-width:150px;" />
+        <select id="newCatBase" class="form-select" style="flex:1; min-width:120px;" required>
+          <option value="top">Related to Top</option>
+          <option value="bottom">Related to Bottom</option>
+          <option value="shoes">Related to Shoes</option>
+          <option value="accessories">Related to Accessory</option>
+        </select>
+        <button type="submit" class="btn btn-primary btn-sm" id="saveCatBtn"><i class="fa-solid fa-plus"></i> Add</button>
+      </form>
+
+      <div id="customCatsList" style="display:flex; flex-direction:column; gap:8px;">
+        <!-- List of custom cats via JS -->
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════ CONFIRM DELETE ══════════════ -->
 <div class="confirm-delete-overlay" id="confirmDeleteOverlay">
   <div class="confirm-box">
@@ -275,8 +289,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 16px;
+    gap: 4px;
+    padding: 12px 8px;
     border: 2px solid var(--border-glass);
     border-radius: var(--radius-md);
     background: var(--bg-glass);

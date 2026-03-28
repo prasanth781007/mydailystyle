@@ -55,7 +55,7 @@ requireAuth(async user => {
   calMonth = now.getMonth();
 
   // Load data in parallel
-  await Promise.all([ loadStore(), loadAllSchedules() ]);
+  await Promise.all([ loadStore(), loadAllSchedules(), loadCategories() ]);
 
   buildCalendar();
 
@@ -66,6 +66,14 @@ requireAuth(async user => {
 
   setupCalNavListeners();
 });
+
+// ── Load Categories ────────────────────────────────────────
+async function loadCategories() {
+  try {
+    const snap = await db.collection('users').doc(uid).collection('categories').get();
+    customCats = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(e) { console.error(e); }
+}
 
 // ── Load Store Items ───────────────────────────────────────
 async function loadStore(){
@@ -215,11 +223,16 @@ function renderCatSections(){
   const wrap = document.getElementById('catSections');
   wrap.innerHTML = '';
   CATS.forEach(cat => {
-    const items = allStoreItems.filter(it => it.category === cat);
+    // Include items that match base cat OR have a custom cat linked to this base
+    const items = allStoreItems.filter(it => {
+      if (it.category === cat) return true;
+      const custom = customCats.find(c => c.id === it.category);
+      return custom && custom.base === cat;
+    });
+
     const section = document.createElement('div');
     section.className = 'cat-builder-section';
     section.id = `cat-sect-${cat}`;
-
     section.innerHTML = `
       <div class="cat-builder-head">
         <div class="cat-builder-label" style="color:${CAT_COLORS[cat]}">
@@ -236,7 +249,6 @@ function renderCatSections(){
       <div class="cat-items-scroll" id="cat-items-${cat}"></div>`;
 
     wrap.appendChild(section);
-
     renderCatItems(cat, items, '');
 
     // Search listener
@@ -244,7 +256,7 @@ function renderCatSections(){
     if (srch) {
       srch.addEventListener('input', e => {
         const q = e.target.value.toLowerCase();
-        const filtered = allStoreItems.filter(it => it.category===cat && it.name.toLowerCase().includes(q));
+        const filtered = items.filter(it => it.name.toLowerCase().includes(q));
         renderCatItems(cat, filtered, q);
       });
     }

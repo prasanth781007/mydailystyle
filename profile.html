@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your Profile – MyDailyStyle</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<!-- ── Top Navigation ── -->
+<nav class="navbar">
+  <a href="dashboard.html" class="navbar-brand">
+    <div class="navbar-logo"><i class="fa-solid fa-shirt"></i></div>
+    <span class="navbar-title">MyDailyStyle</span>
+  </a>
+  <ul class="navbar-nav">
+    <li><a href="dashboard.html" class="nav-link"><i class="fa-solid fa-house"></i> Dashboard</a></li>
+    <li><a href="store.html"     class="nav-link"><i class="fa-solid fa-store"></i> Store</a></li>
+    <li><a href="planner.html"   class="nav-link"><i class="fa-regular fa-calendar"></i> Planner</a></li>
+  </ul>
+  <div class="navbar-user">
+    <div class="user-avatar" id="userAvatar">?</div>
+    <button class="btn btn-secondary btn-sm" onclick="logoutUser()">
+      <i class="fa-solid fa-right-from-bracket"></i> Logout
+    </button>
+  </div>
+</nav>
+
+<!-- ── Mobile Bottom Nav ── -->
+<nav class="bottom-nav">
+  <a href="dashboard.html" class="bottom-nav-item"><i class="fa-solid fa-house"></i><span>Home</span></a>
+  <a href="store.html"     class="bottom-nav-item"><i class="fa-solid fa-store"></i><span>Store</span></a>
+  <a href="planner.html"   class="bottom-nav-item"><i class="fa-regular fa-calendar"></i><span>Planner</span></a>
+  <a href="profile.html"   class="bottom-nav-item active"><i class="fa-solid fa-user"></i><span>Profile</span></a>
+</nav>
+
+<div class="page-wrapper">
+  <div class="container">
+    <div class="section-header fade-in-up">
+      <div>
+        <h1 class="section-title"><i class="fa-solid fa-user-gear gradient-text" style="margin-right:8px;"></i>Profile Settings</h1>
+        <p class="section-subtitle">Manage your account information</p>
+      </div>
+    </div>
+
+    <div class="glass-card fade-in-up delay-1" style="max-width: 600px; margin: 0 auto; padding: 40px;">
+      <form id="profileForm">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <div class="user-avatar" id="profileBigAvatar" style="width: 80px; height: 80px; font-size: 2rem; margin: 0 auto 15px;">?</div>
+          <p id="userEmailLabel" style="color: var(--text-secondary); font-size: 0.9rem;">user@example.com</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="profileName">Display Name</label>
+          <div class="input-icon-wrap">
+            <i class="fa-solid fa-user input-icon"></i>
+            <input type="text" id="profileName" class="form-input" placeholder="Your name" required />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="profileEmail">Email Address (Read-only)</label>
+          <div class="input-icon-wrap">
+            <i class="fa-solid fa-envelope input-icon"></i>
+            <input type="email" id="profileEmail" class="form-input" disabled />
+          </div>
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px;">Email cannot be changed here for security reasons.</p>
+        </div>
+
+        <div id="profileMsg" style="margin-bottom: 20px; font-size: 0.85rem;"></div>
+
+        <div style="display: flex; gap: 12px; margin-top: 30px;">
+          <button type="submit" class="btn btn-primary" id="saveProfileBtn" style="flex: 1;">
+            <i class="fa-solid fa-floppy-disk"></i> Save Changes
+          </button>
+          <a href="dashboard.html" class="btn btn-secondary" style="flex: 1;">Cancel</a>
+        </div>
+      </form>
+
+      <hr style="border: none; border-top: 1px solid var(--border-glass); margin: 40px 0;" />
+
+      <div>
+        <h3 style="font-size: 1rem; margin-bottom: 15px; color: var(--error);">Danger Zone</h3>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">Once you delete your account, there is no going back. Please be certain.</p>
+        <button class="btn btn-danger btn-sm" id="deleteAccountBtn">
+          <i class="fa-solid fa-user-slash"></i> Delete My Account
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Password Confirmation Modal (for deletion) -->
+<div class="modal-overlay" id="confirmDeleteModal">
+  <div class="modal" style="max-width: 400px;">
+    <div class="modal-header">
+      <h2 class="modal-title">Delete Account?</h2>
+      <button class="modal-close" id="closeDeleteModal"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 20px;">
+        To confirm, please enter your password:
+      </p>
+      <div class="form-group">
+        <input type="password" id="deletePassword" class="form-input" placeholder="Enter password" />
+      </div>
+      <div id="deleteMsg" style="color: var(--error); font-size: 0.8rem; margin-bottom: 15px;"></div>
+      <button class="btn btn-danger btn-full" id="finalDeleteBtn">Delete Permanently</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="js/firebase-config.js"></script>
+<script src="js/profile.js"></script>
+</body>
+</html>
